@@ -63,15 +63,18 @@ function scoreBook(book: Book, queryTerms: string[], queryRaw: string): number {
   if (/free/.test(q) && book.list_type === "Free") score += 6;
   if (/paid/.test(q) && book.list_type === "Paid") score += 6;
   if (/highest.{0,10}rated|best.{0,10}rating/.test(q) && book.rating && book.rating >= 4.7) score += 5;
+  if (/least.{0,10}rated|lowest.{0,10}rated|worst.{0,10}rated|low.{0,10}rated|minimum.{0,10}rat/.test(q) && book.rating !== null) score += (5 - book.rating) * 3;
   if (/most.{0,10}review|popular/.test(q) && book.num_reviews && book.num_reviews > 10000) score += 5;
-  if (/cheap|inexpensive|low.{0,5}price/.test(q)) {
+  if (/fewest.{0,10}review|least.{0,10}review|lowest.{0,10}review/.test(q) && book.num_reviews !== null) score += 5 / (book.num_reviews + 1) * 50000;
+  if (/cheap|inexpensive|low.{0,5}price|lowest.{0,5}price|least.{0,5}expens/.test(q)) {
     const priceNum = parseFloat(book.price.replace(/[^0-9.]/g, ""));
     if (!isNaN(priceNum) && priceNum < 400) score += 4;
   }
-  if (/expensive|premium/.test(q)) {
+  if (/expensive|premium|highest.{0,5}price|most.{0,5}expens/.test(q)) {
     const priceNum = parseFloat(book.price.replace(/[^0-9.]/g, ""));
     if (!isNaN(priceNum) && priceNum > 700) score += 4;
   }
+  if (/lowest.{0,5}rank|worst.{0,5}rank|last.{0,5}rank|bottom/.test(q) && book.rank >= 90) score += 6;
 
   return score;
 }

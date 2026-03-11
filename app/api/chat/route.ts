@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const { messages } = await req.json();
   const lastMessage = messages[messages.length - 1]?.content ?? "";
 
-  const relevantBooks = retrieveRelevantBooks(lastMessage, 12);
+  const relevantBooks = retrieveRelevantBooks(lastMessage, 15);
   const stats = getDatasetStats();
   const allBooks = getCompactBooksList();
 
@@ -24,48 +24,74 @@ export async function POST(req: Request) {
       (b) =>
         `[${b.list_type} #${b.rank}] "${b.title}" by ${b.author}
   Rating: ${b.rating ?? "N/A"}/5 | Reviews: ${b.num_reviews?.toLocaleString() ?? "N/A"} | Price: ${b.price}
-  Publisher: ${b.publisher} | Published: ${b.publication_date}
+  Publisher: ${b.publisher || "N/A"} | Published: ${b.publication_date || "N/A"}
   URL: ${b.url}
-  Description: ${b.description.slice(0, 300)}${b.description.length > 300 ? "…" : ""}`
+  Description: ${b.description?.slice(0, 400)}${(b.description?.length ?? 0) > 400 ? "…" : ""}`
     )
     .join("\n\n");
 
-  const systemPrompt = `You are a helpful assistant that answers questions about the Amazon Kindle Paranormal Romance Bestsellers dataset. The current year is 2026.
+  const systemPrompt = `You are a knowledgeable assistant for the Amazon Kindle Paranormal Romance Bestsellers dataset. The current year is 2026.
 
-STRICT RULE: You ONLY answer using the data provided below. Do not use any outside knowledge, do not make up books, authors, or facts. If the answer is not in the dataset, say "I don't have that information in the dataset."
+STRICT RULE: Answer ONLY using the data below. Do not invent books, authors, or facts. If something is genuinely not in the data, say so clearly.
 
-DATASET STATISTICS (computed from ALL 200 books):
-- Total books: ${stats.total} (${stats.paid} Paid + ${stats.free} Free)
+═══════════════════════════════════════
+DATASET STATISTICS (ALL 200 BOOKS)
+═══════════════════════════════════════
+- Total: ${stats.total} books (${stats.paid} Paid + ${stats.free} Free)
 - Average rating: ${stats.avgRating}/5
-- Books with no rating: ${stats.booksWithNoRating}
 - Total reviews: ${stats.totalReviews}
-- Highest rated: "${stats.highestRated?.title}" (★${stats.highestRated?.rating})
-- Most reviewed: "${stats.mostReviewed?.title}" (${stats.mostReviewed?.num_reviews?.toLocaleString()} reviews)
-- Paid price range: INR ${stats.minPrice} – INR ${stats.maxPrice} (avg INR ${stats.avgPaidPrice})
 - #1 Paid: "${stats.topPaidBook}"
 - #1 Free: "${stats.topFreeBook}"
-- Publication years: ${yearBreakdown}
-- Top publishers: ${stats.topPublishers}
 
-FULL BOOK LIST (all 200 books — use this to answer any counting, filtering, or aggregate questions):
+PUBLICATION YEARS:
+${yearBreakdown}
+
+PRICES (Paid books):
+- Cheapest: "${stats.cheapestPaid?.title}" — ${stats.cheapestPaid?.priceStr}
+- Most expensive: "${stats.mostExpensivePaid?.title}" — ${stats.mostExpensivePaid?.priceStr}
+- Average price: INR ${stats.avgPaidPrice}
+- All Free books are priced at INR 0.00
+
+RATINGS:
+- Books rated ≥ 4.8: ${stats.ratingAbove48Count} → ${stats.ratingAbove48}
+- Books rated ≥ 4.5: ${stats.ratingAbove45Count}
+- Books rated < 4.0: ${stats.ratingBelow40Count} → ${stats.ratingBelow40}
+- Books with no rating: ${stats.booksWithNoRating} → ${stats.unratedBooks}
+- Highest rated: "${stats.highestRated?.title}" (★${stats.highestRated?.rating}, ${stats.highestRated?.list_type} #${stats.highestRated?.rank})
+
+REVIEWS:
+- Most reviewed: "${stats.mostReviewed?.title}" (${stats.mostReviewed?.num_reviews?.toLocaleString()} reviews)
+- Least reviewed (bottom 5): ${stats.leastReviewed}
+
+TOP PUBLISHERS: ${stats.topPublishers}
+
+AUTHORS WITH MULTIPLE BOOKS:
+${stats.multiBookAuthors}
+
+═══════════════════════════════════════
+FULL BOOK LIST (all 200 — use for counting, filtering, listing)
+═══════════════════════════════════════
 ${allBooks}
 
-DETAILED CONTEXT for top relevant books:
+═══════════════════════════════════════
+DETAILED CONTEXT (top ${relevantBooks.length} most relevant books)
+═══════════════════════════════════════
 ${detailedContext}
 
-When answering:
-- For counting/aggregate questions (how many, which year, etc.) always scan the FULL BOOK LIST above
-- Cite book titles and ranks (e.g., "Paid #3 — The Wolf King")
-- Use exact numbers from the data
-- If asked for a list, format it clearly with bullet points or numbered items
-- Keep answers concise and factual`;
+ANSWERING GUIDELINES:
+- For count/aggregate questions (how many, which year, list all, etc.) → scan the FULL BOOK LIST above
+- For specific book info, descriptions, or recommendations → use the DETAILED CONTEXT
+- Always cite rank and list type: e.g. "Paid #3 — The Wolf King"
+- Include Amazon URLs when asked for links
+- Use exact numbers from the data — never estimate
+- If a book has no rating, say "unrated" not "N/A"`;
 
   const result = streamText({
-    model: groq("llama-3.1-8b-instant"),
+    model: groq("llama-3.3-70b-versatile"),
     system: systemPrompt,
     messages,
     maxTokens: 1024,
-    temperature: 0.2,
+    temperature: 0.1,
   });
 
   return result.toDataStreamResponse();

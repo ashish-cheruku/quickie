@@ -113,13 +113,67 @@ export function getDatasetStats() {
   const ratings = books.filter((b) => b.rating !== null).map((b) => b.rating!);
   const reviews = books.filter((b) => b.num_reviews !== null).map((b) => b.num_reviews!);
 
+  // Publication year breakdown
+  const yearCounts: Record<string, number> = {};
+  for (const b of books) {
+    const yr = b.publication_date ? b.publication_date.slice(0, 4) : "Unknown";
+    yearCounts[yr] = (yearCounts[yr] ?? 0) + 1;
+  }
+
+  // Publisher breakdown (top 10)
+  const pubCounts: Record<string, number> = {};
+  for (const b of books) {
+    const p = b.publisher?.trim() || "Unknown";
+    pubCounts[p] = (pubCounts[p] ?? 0) + 1;
+  }
+  const topPublishers = Object.entries(pubCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, count]) => `${name} (${count})`)
+    .join(", ");
+
+  // Rating distribution
+  const ratingDist: Record<string, number> = {};
+  for (const r of ratings) {
+    const key = r.toFixed(1);
+    ratingDist[key] = (ratingDist[key] ?? 0) + 1;
+  }
+
+  // Price stats (paid only)
+  const paidPrices = paid
+    .map((b) => parseFloat(b.price.replace(/[^0-9.]/g, "")))
+    .filter((p) => !isNaN(p) && p > 0);
+  const avgPaidPrice = paidPrices.length
+    ? (paidPrices.reduce((a, b) => a + b, 0) / paidPrices.length).toFixed(2)
+    : "N/A";
+  const minPrice = paidPrices.length ? Math.min(...paidPrices).toFixed(2) : "N/A";
+  const maxPrice = paidPrices.length ? Math.max(...paidPrices).toFixed(2) : "N/A";
+
   return {
     total: books.length,
     paid: paid.length,
     free: free.length,
     avgRating: (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(2),
     totalReviews: reviews.reduce((a, b) => a + b, 0).toLocaleString(),
-    topPaidBook: paid.sort((a, b) => a.rank - b.rank)[0]?.title,
-    topFreeBook: free.sort((a, b) => a.rank - b.rank)[0]?.title,
+    topPaidBook: [...paid].sort((a, b) => a.rank - b.rank)[0]?.title,
+    topFreeBook: [...free].sort((a, b) => a.rank - b.rank)[0]?.title,
+    yearCounts,
+    topPublishers,
+    ratingDist,
+    avgPaidPrice,
+    minPrice,
+    maxPrice,
+    booksWithNoRating: books.filter((b) => b.rating === null).length,
+    highestRated: [...books].filter((b) => b.rating !== null).sort((a, b) => b.rating! - a.rating!)[0],
+    mostReviewed: [...books].filter((b) => b.num_reviews !== null).sort((a, b) => b.num_reviews! - a.num_reviews!)[0],
   };
+}
+
+export function getCompactBooksList(): string {
+  return books
+    .map(
+      (b) =>
+        `[${b.list_type} #${b.rank}] "${b.title}" by ${b.author} | ★${b.rating ?? "N/A"} | ${b.num_reviews?.toLocaleString() ?? "N/A"} reviews | ${b.price} | Published: ${b.publication_date || "N/A"} | Publisher: ${b.publisher || "N/A"} | ASIN: ${b.asin}`
+    )
+    .join("\n");
 }
